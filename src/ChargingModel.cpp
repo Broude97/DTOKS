@@ -1,8 +1,8 @@
 /** @file ChargingModel.cpp
  *  @brief Implementation of class for physics models relevant to dust charging
- *  
+ *
  *  Implement the member functions of the ChargeModel class
- *  
+ *
  *  @author Luke Simons (ls5115@ic.ac.uk)
  *  @bug bugs, they definitely exist
  */
@@ -18,7 +18,7 @@ ChargingModel::ChargingModel():Model(){
     CreateFile("Data/default_cm_0.txt");
 }
 
-ChargingModel::ChargingModel(std::string filename, float accuracy, 
+ChargingModel::ChargingModel(std::string filename, float accuracy,
 std::vector<CurrentTerm*> currentterms, Matter *& sample, PlasmaData &pdata):
 Model(filename,sample,pdata,accuracy){
     C_Debug("\n\nIn ChargingModel::ChargingModel(std::string filename, "
@@ -29,7 +29,7 @@ Model(filename,sample,pdata,accuracy){
     CreateFile(filename);
 }
 
-ChargingModel::ChargingModel(std::string filename, float accuracy, 
+ChargingModel::ChargingModel(std::string filename, float accuracy,
 std::vector<CurrentTerm*> currentterms, Matter *& sample, PlasmaData *pdata):
 Model(filename,sample,*pdata,accuracy){
     C_Debug("\n\nIn ChargingModel::ChargingModel(std::string filename, "
@@ -40,7 +40,7 @@ Model(filename,sample,*pdata,accuracy){
     CreateFile(filename);
 }
 
-ChargingModel::ChargingModel(std::string filename, float accuracy, 
+ChargingModel::ChargingModel(std::string filename, float accuracy,
 std::vector<CurrentTerm*> currentterms, Matter *& sample, PlasmaGrid_Data &pgrid):
 Model(filename,sample,pgrid,accuracy){
     C_Debug("\n\nIn ChargingModel::ChargingModel(std::string filename, "
@@ -51,8 +51,8 @@ Model(filename,sample,pgrid,accuracy){
     CreateFile(filename);
 }
 
-ChargingModel::ChargingModel(std::string filename, float accuracy, 
-std::vector<CurrentTerm*> currentterms, Matter *& sample, PlasmaGrid_Data &pgrid, 
+ChargingModel::ChargingModel(std::string filename, float accuracy,
+std::vector<CurrentTerm*> currentterms, Matter *& sample, PlasmaGrid_Data &pgrid,
 PlasmaData &pdata):
 Model(filename,sample,pgrid,pdata,accuracy){
     C_Debug("\n\nIn ChargingModel::ChargingModel(std::string filename, "
@@ -77,12 +77,12 @@ void ChargingModel::CreateFile(std::string filename){
 void ChargingModel::Print(){
     C_Debug("\tIn ChargingModel::Print()\n\n");
     ModelDataFile.open(FileName,std::ofstream::app);
-    ModelDataFile << TotalTime << "\t" 
+    ModelDataFile << TotalTime << "\t"
         << -(4.0*PI*epsilon0*Sample->get_radius()*Sample->get_potential()*Kb*
         Pdata->ElectronTemp)/(echarge*echarge);
     if( Sample->is_positive() )  ModelDataFile << "\tPos";
     if( !Sample->is_positive() ) ModelDataFile << "\tNeg";
-    ModelDataFile << "\t" << Sample->get_deltatot() << "\t" 
+    ModelDataFile << "\t" << Sample->get_deltatot() << "\t"
         << Sample->get_potential() << "\n";
 
     ModelDataFile.close();
@@ -94,7 +94,7 @@ double ChargingModel::ProbeTimeStep()const{
 
     double timestep(1.0);
 
-    //!< Tests have shown that Time step based on the electron plasma frequency. 
+    //!< Tests have shown that Time step based on the electron plasma frequency.
     if( Pdata->ElectronDensity != 0 )
         timestep = Accuracy*sqrt((epsilon0*Me)/
             (2*PI*Pdata->ElectronDensity*echarge*echarge));
@@ -117,17 +117,17 @@ void ChargingModel::Charge(double timestep){
     //!< Make sure timestep input time is valid. Shouldn't exceed the timescale
     //!< of the process.
     assert(timestep > 0);
-    
+
     //!< Calculate Thermionic and secondary electron emission yields for use in
     //!< the heating models
     double DTherm(0.0), DSec(0.0);
     for(auto iter = CurrentTerms.begin(); iter != CurrentTerms.end(); ++iter) {
-        if( (*iter)->PrintName() == "TEEcharge" ){
+        if((*iter)->PrintName() == "TEE" || (*iter)->PrintName() == "TEEcharge"){
             DTherm = Flux::DeltaTherm(Sample,Pdata);
         }else if( (*iter)->PrintName() == "TEESchottky" ){
             DTherm = Flux::DeltaTherm(Sample,Pdata);
         }
-        if( (*iter)->PrintName() == "SEEcharge" ){
+        if((*iter)->PrintName() == "SEE" || (*iter)->PrintName() == "SEEcharge"){
             DSec = Flux::DeltaSec(Sample,Pdata);
         }
     }
@@ -138,7 +138,7 @@ void ChargingModel::Charge(double timestep){
     //!< Implement regular falsi method to find root of current balance
     //double Potential = RegulaFalsi();
 
-    //!< Have to calculate charge of grain here since it doesn't know about the 
+    //!< Have to calculate charge of grain here since it doesn't know about the
     //!< Electron Temp and since potential is normalised.
     if( Potential != 0 ){
         double charge = -(4.0*PI*epsilon0*Sample->get_radius()*Potential*Kb*
@@ -169,22 +169,26 @@ double ChargingModel::Bisection()const{
         //!< Take new x position as halfway between upper and lower bound
         Potential = (a+b)/2.0;
 
+        // RESET CURRENTS TO ZERO AT THE START OF EACH BISECTION STEP
+        Current1 = 0.0;
+        Current2 = 0.0;
+
         //!< Sum all the terms in the current balance
-        for(auto iter = CurrentTerms.begin(); iter != CurrentTerms.end(); 
+        for(auto iter = CurrentTerms.begin(); iter != CurrentTerms.end();
             ++iter) {
-            if( (*iter)->PrintName() == "SEEcharge" ){
+            if((*iter)->PrintName() == "SEE" || (*iter)->PrintName() == "SEEcharge"){
                 Current1 += (*iter)->Evaluate(Sample,Pdata,Potential)
                     *CurrentTerms[0]->Evaluate(Sample,Pdata,Potential);
                 Current2 += (*iter)->Evaluate(Sample,Pdata,a)
                     *CurrentTerms[0]->Evaluate(Sample,Pdata,a);
-                C_Debug( "\n\t\t" << (*iter)->PrintName() << " = " 
+                C_Debug( "\n\t\t" << (*iter)->PrintName() << " = "
                     << (*iter)->Evaluate(Sample,Pdata,Potential)
-                    *CurrentTerms[0]->Evaluate(Sample,Pdata,Potential)  
+                    *CurrentTerms[0]->Evaluate(Sample,Pdata,Potential)
                     << "\n" );
             }else{
                 Current1 += (*iter)->Evaluate(Sample,Pdata,Potential);
                 Current2 += (*iter)->Evaluate(Sample,Pdata,a);
-                C_Debug( "\n\t\t" << (*iter)->PrintName() << " = " 
+                C_Debug( "\n\t\t" << (*iter)->PrintName() << " = "
                     << (*iter)->Evaluate(Sample,Pdata,Potential) << "\n");
             }
         }
@@ -217,21 +221,21 @@ double ChargingModel::RegulaFalsi()const{
     double a(-5.0), b(10.0);
     double amin(-5.0), bmax(10.0);
     //!< Sum all the terms in the current balance
-    for(auto iter = CurrentTerms.begin(); iter != CurrentTerms.end(); 
+    for(auto iter = CurrentTerms.begin(); iter != CurrentTerms.end();
         ++iter) {
         if( (*iter)->PrintName() == "SEEcharge" ){
             Current1 += (*iter)->Evaluate(Sample,Pdata,a)
                 *CurrentTerms[0]->Evaluate(Sample,Pdata,a);
             Current2 += (*iter)->Evaluate(Sample,Pdata,b)
                 *CurrentTerms[0]->Evaluate(Sample,Pdata,b);
-            C_Debug( "\n\t\t" << (*iter)->PrintName() << " = " 
+            C_Debug( "\n\t\t" << (*iter)->PrintName() << " = "
                 << (*iter)->Evaluate(Sample,Pdata,a)
-                *CurrentTerms[0]->Evaluate(Sample,Pdata,a)  
+                *CurrentTerms[0]->Evaluate(Sample,Pdata,a)
                 << "\n" );
         }else{
             Current1 += (*iter)->Evaluate(Sample,Pdata,a);
             Current2 += (*iter)->Evaluate(Sample,Pdata,b);
-            C_Debug( "\n\t\t" << (*iter)->PrintName() << " = " 
+            C_Debug( "\n\t\t" << (*iter)->PrintName() << " = "
                 << (*iter)->Evaluate(Sample,Pdata,a) << "\n");
         }
     }
@@ -248,18 +252,18 @@ double ChargingModel::RegulaFalsi()const{
         double Current3(0.0);
 
         //!< Sum all the terms in the current balance
-        for(auto iter = CurrentTerms.begin(); iter != CurrentTerms.end(); 
+        for(auto iter = CurrentTerms.begin(); iter != CurrentTerms.end();
             ++iter){
             if( (*iter)->PrintName() == "SEEcharge" ){
                 Current1 += (*iter)->Evaluate(Sample,Pdata,Potential)
                     *CurrentTerms[0]->Evaluate(Sample,Pdata,Potential);
-                C_Debug( "\n\t\t" << (*iter)->PrintName() << " = " 
+                C_Debug( "\n\t\t" << (*iter)->PrintName() << " = "
                     << (*iter)->Evaluate(Sample,Pdata,Potential)
-                    *CurrentTerms[0]->Evaluate(Sample,Pdata,Potential)  
+                    *CurrentTerms[0]->Evaluate(Sample,Pdata,Potential)
                     << "\n" );
             }else{
                 Current3 += (*iter)->Evaluate(Sample,Pdata,Potential);
-                C_Debug( "\n\t\t" << (*iter)->PrintName() << " = " 
+                C_Debug( "\n\t\t" << (*iter)->PrintName() << " = "
                     << (*iter)->Evaluate(Sample,Pdata,Potential) << "\n");
             }
         }
@@ -267,7 +271,7 @@ double ChargingModel::RegulaFalsi()const{
         if(Current3 * Current2 > 0){
             //!< Current3 and Current2 have same sign, copy Potential to b
             b = Potential; Current2 = Current3;
-            if(side==-1){ 
+            if(side==-1){
                 Current1 /= 2;
             }
             side = -1;
